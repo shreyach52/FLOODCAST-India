@@ -1,0 +1,9 @@
+{
+  "date": "Data Acquisition Time",
+  "discharge": "Manual Daily River Water Discharge (m3/sec)",
+  "station_id": "Station",
+  "river": "River",
+  "state": "State",
+  "lat": "Latitude",
+  "lon": "Longitude"
+}

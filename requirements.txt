@@ -1,0 +1,8 @@
+
+# Step 1 (data layer). Later steps will add catboost, lightgbm, torch, shap, streamlit, etc.
+pandas>=2.0
+numpy>=1.24
+pytest>=7.0
+cdsapi>=0.7
+xarray>=2024.1
+netCDF4>=1.6

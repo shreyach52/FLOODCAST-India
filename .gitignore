@@ -1,0 +1,25 @@
+data/raw/*
+data/interim/*
+data/interim_synthetic/
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+__pycache__/
+.pytest_cache/
+*.part
+.venv/
+# Private credentials
+.cdsapirc
+.env
+.env.*
+
+# ERA5-Land downloads
+*.nc
+*.grib
+*.grb
+
+# Python environments and cache
+venv/
+*.pyc
+
+# Generated model files
+models/
