@@ -20,7 +20,7 @@ VARIABLES = [
 TIME = ["00:00"]
 
 
-def plan_chunks(first_year: int = 2015, today: date | None = None, lag_days: int = 10):
+def plan_chunks(first_year: int = 2001, today: date | None = None, lag_days: int = 10):
     """List of (tag, year, [months]) requests. Whole years for finished years; for the current year only
     months that ended at least `lag_days` ago (ERA5-Land is released a few days behind real time)."""
     today = today or date.today()
@@ -62,3 +62,19 @@ def nearest_valid_cells(st_lat, st_lon, grid_lat, grid_lon, valid):
         k = int(np.argmin(d))
         iy.append(int(iy_all[k])); ix.append(int(ix_all[k])); km.append(float(d[k]))
     return np.array(iy), np.array(ix), np.array(km)
+
+def common_variables(var_sets, required=("tp", "swvl1"), optional=("swvl2", "t2m")):
+    """Variables that exist in EVERY chunk. Returns (used, dropped_optional).
+    Raises if a required variable is missing from any chunk, so a model is never trained on
+    a feature that exists for only some years."""
+    sets = [set(v) for v in var_sets]
+    if not sets:
+        raise ValueError("no chunks")
+    for i, v in enumerate(sets):
+        miss = [r for r in required if r not in v]
+        if miss:
+            raise ValueError(f"chunk #{i} is missing required variable(s) {miss}")
+    common = set.intersection(*sets)
+    used = list(required) + [o for o in optional if o in common]
+    dropped = [o for o in optional if any(o in v for v in sets) and o not in common]
+    return used, dropped

@@ -23,3 +23,18 @@ def test_nearest_valid_cell_skips_sea():
     valid = np.ones((3, 3), bool); valid[:, 0] = False          # western column is sea
     iy, ix, km = nearest_valid_cells([10.1], [75.0], lat, lon, valid)
     assert ix[0] == 1 and iy[0] == 1 and km[0] > 0
+
+def test_common_variables_drops_optional_not_in_every_chunk():
+    import pytest
+    from floodcast.era5 import common_variables
+    used, dropped = common_variables([["tp", "swvl1", "swvl2", "t2m"], ["tp", "swvl1"]])
+    assert used == ["tp", "swvl1"] and set(dropped) == {"swvl2", "t2m"}
+    used, dropped = common_variables([["tp", "swvl1", "t2m"], ["tp", "swvl1", "t2m"]])
+    assert used == ["tp", "swvl1", "t2m"] and dropped == []
+    with pytest.raises(ValueError):
+        common_variables([["tp", "swvl1"], ["swvl1"]])
+
+
+def test_plan_chunks_default_starts_2001():
+    ch = plan_chunks(today=date(2026, 11, 4))
+    assert ch[0][0] == "2001" and ch[3][0] == "2004"

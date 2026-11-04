@@ -1,4 +1,4 @@
-"""STEP 3a: download ERA5-Land daily fields (rain, soil moisture 0-7 & 7-28 cm, 2 m temperature) for Karnataka+Kerala.
+"""STEP 3a: download ERA5-Land daily fields (rain + soil moisture layer 1 (0-7 cm)) for Karnataka+Kerala.
 
 One-time setup (free):
   1. Register at https://cds.climate.copernicus.eu and log in.
@@ -10,6 +10,7 @@ One-time setup (free):
 Run:  python scripts/06a_download_era5land.py          (safe to re-run: finished chunks are skipped)
 """
 import _bootstrap  # noqa: F401
+import argparse
 import zipfile
 from pathlib import Path
 
@@ -20,10 +21,13 @@ OUT = Path(config.DATA_RAW) / "era5land"
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--first-year", type=int, default=2001)
+    a = ap.parse_args()
     import cdsapi
     OUT.mkdir(parents=True, exist_ok=True)
     client = cdsapi.Client()
-    chunks = plan_chunks()
+    chunks = plan_chunks(a.first_year)
     print(f"{len(chunks)} requests planned -> {OUT}")
     failed = []
     for tag, year, months in chunks:
