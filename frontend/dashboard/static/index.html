@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLOODCAST INDIA</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <div class="name">FLOODCAST INDIA</div>
+      <div class="sub">River Discharge Forecasting &amp; Monitoring</div>
+    </div>
+    <nav>
+      <a href="#/" data-nav="dash">Dashboard</a>
+      <a href="#/station" data-nav="station">Station</a>
+      <a href="#/performance" data-nav="perf">Model performance</a>
+    </nav>
+    <div class="updated" id="updated">Loading…</div>
+  </div>
+</header>
+<main class="wrap" id="view"></main>
+<footer class="wrap foot">Discharge in m³/s. Data are read from the backend's existing output files; nothing on this site is simulated.</footer>
+<script src="vendor/chart.umd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

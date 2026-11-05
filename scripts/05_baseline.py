@@ -147,6 +147,7 @@ def main():
 
     models = [("lightgbm", feats)] + ([("lightgbm_wx", feats_wx)] if feats_wx else [])
     rows, imp_lines = [], []
+    fc_rows = []
     for h in H:
         y = f"y{h}"
         d = X[X[y].notna()].copy()
@@ -181,6 +182,22 @@ def main():
             doy = doy.where(doy <= 366, doy - 366)
             te["p_clim"] = [clim.get((s, int(k)), np.nan) for s, k in zip(te.station_id, doy)]
             te["p_clim"] = te.p_clim.fillna(te.q0)
+            # Save existing model predictions for the dashboard
+            forecast_col = (
+                "p_lightgbm_wx"
+                if "p_lightgbm_wx" in te.columns
+                else "p_lightgbm"
+            )
+
+            fc_rows.append(
+                te[["station_id", "date"]]
+                .rename(columns={"date": "issue_date"})
+                .assign(
+                    horizon=h,
+                    q_pred=te[forecast_col].to_numpy(),
+                    split=name
+                )
+            )
             cols = [("persistence", "p_persist"), ("climatology", "p_clim")] + [(m_, f"p_{m_}") for m_, _ in models]
             for mname, col in cols:
                 r = {"horizon": h, "split": name, "model": mname, **metrics(te[y], te[col], te.thr, te.q0)}
@@ -189,6 +206,22 @@ def main():
 
     res = pd.DataFrame(rows)
     res.to_csv(ind / "baseline_metrics.csv", index=False)
+    # Write forecasts for the dashboard
+    if fc_rows:
+        forecasts = pd.concat(fc_rows, ignore_index=True)
+        forecasts["q_low"] = np.nan
+        forecasts["q_high"] = np.nan
+
+        forecast_path = config.ROOT / "data" / "processed" / "forecasts.csv.gz"
+        forecast_path.parent.mkdir(parents=True, exist_ok=True)
+
+        forecasts = forecasts[
+            ["station_id", "issue_date", "horizon",
+             "q_pred", "q_low", "q_high", "split"]
+        ]
+
+        forecasts.to_csv(forecast_path, index=False, compression="gzip")
+        print(f"Dashboard forecasts saved: {forecast_path}")
     show = res[["horizon", "split", "model", "n", "rmse", "median_station_rmse", "median_station_nse",
                 "hi_n", "hi_rmse", "hi_recall", "hi_precision",
                 "onset_n", "onset_recall", "onset_alarms", "onset_precision"]].round(3)

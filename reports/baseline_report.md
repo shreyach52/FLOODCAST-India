@@ -35,7 +35,7 @@ High flow = station's train-period 95th percentile. hi_recall = share of true hi
 ## What the weather adds (lightgbm_wx minus lightgbm; negative RMSE change = better)
 ```
                            med_rmse_change  nse_change  onset_recall_wo  onset_recall_wx  onset_prec_wo  onset_prec_wx
-horizon split
+horizon split                                                                                                         
 1       A_seen_stations             -0.783      -0.010            0.053            0.088          0.331          0.378
         B_unseen_stations           -4.286       0.015            0.071            0.111          0.375          0.338
 3       A_seen_stations              0.348       0.007            0.041            0.070          0.224          0.298

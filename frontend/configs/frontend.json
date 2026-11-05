@@ -1,0 +1,10 @@
+{
+  "train_end": "2018-12-31",
+  "elevated_quantile": 0.90,
+  "high_quantile": 0.95,
+  "fresh_days": 7,
+  "min_train_obs": 365,
+  "forecast_file": "data/processed/forecasts.csv.gz",
+  "weather_file": "data/interim/weather_daily.csv.gz",
+  "metrics_files": ["data/interim/baseline_metrics.csv"]
+}

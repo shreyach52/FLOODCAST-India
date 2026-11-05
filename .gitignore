@@ -23,3 +23,8 @@ venv/
 
 # Generated model files
 models/
+# Generated dashboard forecasts
+data/processed/
+
+# Backup files
+*.backup
