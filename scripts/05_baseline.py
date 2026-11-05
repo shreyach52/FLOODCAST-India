@@ -188,7 +188,7 @@ def main():
         va = d[seen & (d.date > tr_end) & (d.tdate <= va_end)]
         te_seen = d[seen & (d.date >= te_start)]
         te_unseen = d[~seen & (d.date >= te_start)]
-        p = dict(objective="regression", learning_rate=0.05, num_leaves=63, min_data_in_leaf=50,
+        p = dict(objective="regression", learning_rate=0.05, num_leaves=31, min_data_in_leaf=100,
                  feature_fraction=0.8, bagging_fraction=0.8, bagging_freq=1, verbose=-1, seed=a.seed)
         base = (lambda d: np.log1p(d.q0)) if a.target == "residual" else (lambda d: 0.0)
         fitted = {}
