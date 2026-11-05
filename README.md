@@ -1,60 +1,70 @@
-# FLOODCAST INDIA
+## Model Performance and Evaluation
 
-Goal of this step: get the real CWC river-discharge data onto your machine, look at its
-real columns, and turn it into ONE clean table (`station_id, date, discharge`) that every
-later step uses. Nothing here trains a model yet.
+FLOODCAST INDIA uses LightGBM regression models to forecast river discharge 1, 3, and 7 days ahead. Two configurations are evaluated:
 
-## Setup
-```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python -m pytest -q                # all tests should pass
-```
+- **LightGBM:** Uses historical river discharge, lagged values, rolling statistics, and station characteristics.
+- **LightGBM + Weather:** Adds ERA5-Land rainfall and soil-moisture features.
 
-## Try the pipeline on FAKE data first (30 seconds)
-```bash
-python scripts/00_make_synthetic.py
-python scripts/02_inspect_schema.py --dir data/raw/synthetic --map-out configs/column_map_synthetic.json
-python scripts/03_build_discharge_table.py --dir data/raw/synthetic --out-dir data/interim_synthetic --map configs/column_map_synthetic.json
-```
+### Evaluation methodology
 
-## Run it on the REAL data
-```bash
-# 1. download (start small: one or two states)
-python scripts/01_download_cwc.py --states KA KL
-#    other eras:  --eras 1950_2000 2001_2025 2026_2030      all states: --all
+- Training period: Up to 31 December 2018.
+- Validation period: Up to 31 December 2021.
+- Testing period: From 1 January 2022 onward.
+- Stations included: 98.
+- Training stations: 63.
+- Unseen evaluation stations: 35 (10 randomly held-out stations and 25 late-start stations).
 
-# 2. look at the real headers (prints columns + sample rows + a guessed column map)
-python scripts/02_inspect_schema.py
-#    -> open configs/column_map.json and FIX anything that is wrong
+Two evaluation groups are used:
 
-# 3. clean + merge + data-quality report
-python scripts/03_build_discharge_table.py
-#    if the raw numbers are in cubic feet per second:  add  --source-unit cfs
-```
-Outputs: `data/interim/discharge_daily.csv.gz`, `data/interim/station_coverage.csv`,
-`reports/data_report.md`. READ the report: it decides which models are possible.
+- **Seen stations:** Stations represented in the training data, evaluated on future dates.
+- **Unseen stations:** Stations excluded from training, including stations with records beginning after the training period.
 
-If a download fails, open the link in a browser, save the CSV into `data/raw/cwc/`, and continue.
+### Evaluation metrics
 
-## Files
-- `floodcast/contracts.py`  FROZEN interfaces (column names, units, validators, splits). Read `docs/TEAM_CONTRACTS.md`.
-- `floodcast/io_cwc.py`     header guesser, date parser, cleaner, station coverage.
-- `floodcast/config.py`     paths + CWC download registry.
-- `docs/DATA_SOURCES.md`    all six data sources: what each gives, how to get it, what is verified.
-- `docs/STEP_LOG.md`        what is done and what comes next.
+| Metric | Meaning |
+|---|---|
+| RMSE | Overall root mean squared error; penalizes large forecast errors. |
+| Extreme RMSE | RMSE calculated only on actual high-flow days. |
+| MAE | Mean absolute error. |
+| R² | Coefficient of determination; measures explained variance. |
 
+Extreme-flow days are defined using each station's 95th-percentile discharge threshold calculated from its training-period reference data.
 
-## Pipeline after step 1 (run in this order)
+### Test results
 
-```
-python scripts/04_gap_analysis.py
-python scripts/03b_qc_outliers.py              # drops impossible discharge values, writes reports/qc_flags.csv
-python scripts/06a_download_era5land.py        # needs a free Copernicus CDS account + ~/.cdsapirc (see script header)
-python scripts/06b_extract_station_weather.py  # -> data/interim/weather_daily.csv.gz, reports/weather_report.md
-python scripts/05_baseline.py                  # -> reports/baseline_report.md (with vs without weather)
-python scripts/07_lstm.py --quick              # 2-min pipeline check, then:  python scripts/07_lstm.py
-```
+Results below compare the discharge-only model with the weather-enhanced model.
 
-Status and next steps: `docs/STEP_LOG.md`. Large data folders are git-ignored on purpose.
+| Horizon | Station group | Model | RMSE | Extreme RMSE | MAE | R² |
+|---|---|---|---:|---:|---:|---:|
+| 1 day | Seen | LightGBM | 115.955 | 317.700 | 24.460 | 0.840 |
+| 1 day | Seen | LightGBM + Weather | 116.006 | 320.458 | 24.007 | 0.839 |
+| 1 day | Unseen | LightGBM | 144.035 | 449.293 | 24.188 | 0.792 |
+| 1 day | Unseen | LightGBM + Weather | 129.065 | 399.814 | 22.683 | 0.833 |
+| 3 days | Seen | LightGBM | 187.056 | 540.980 | 38.826 | 0.586 |
+| 3 days | Seen | LightGBM + Weather | 185.450 | 534.859 | 37.931 | 0.593 |
+| 3 days | Unseen | LightGBM | 234.617 | 745.587 | 38.931 | 0.449 |
+| 3 days | Unseen | LightGBM + Weather | 231.833 | 736.130 | 38.578 | 0.462 |
+| 7 days | Seen | LightGBM | 231.782 | 680.574 | 48.763 | 0.367 |
+| 7 days | Seen | LightGBM + Weather | 223.871 | 654.259 | 47.748 | 0.410 |
+| 7 days | Unseen | LightGBM | 269.730 | 850.819 | 48.732 | 0.267 |
+| 7 days | Unseen | LightGBM + Weather | 268.635 | 848.069 | 48.255 | 0.273 |
+
+*Discharge error units follow the units provided by the source CWC data.*
+
+### Key findings
+
+- Weather features improve all four reported metrics for unseen 1-day forecasts.
+- Weather improves overall RMSE, extreme RMSE, MAE, and R² for both seen and unseen 3-day forecasts.
+- Weather improves all four metrics for seen 7-day forecasts.
+- Improvements for unseen 7-day forecasts are smaller, indicating that longer-range forecasting remains challenging.
+- The 1-day seen-station model shows a small trade-off: weather improves MAE but slightly worsens RMSE, extreme RMSE, and R².
+
+### Limitations
+
+- Forecast performance varies across stations and forecast horizons.
+- Some stations have limited historical discharge records.
+- Unseen stations are more challenging because the model has no station-specific training history.
+- Forecasts are experimental estimates and should not be treated as official flood warnings.
+- Further validation with additional stations, hydrological features, and operational forecasting data is required.
+
+These results represent the current prototype's held-out test evaluation, not a guarantee of real-world flood prediction accuracy.

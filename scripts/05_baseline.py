@@ -50,22 +50,53 @@ def make_features(g: pd.DataFrame) -> pd.DataFrame:
 
 def metrics(y, p, thr=None, q0=None):
     y, p = np.asarray(y, float), np.asarray(p, float)
-    out = {"n": len(y), "rmse": float(np.sqrt(np.mean((y - p) ** 2))), "mae": float(np.mean(np.abs(y - p)))}
+
+    errors = y - p
+    ss_res = np.sum(errors ** 2)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+
+    out = {
+        "n": len(y),
+        "rmse": float(np.sqrt(np.mean(errors ** 2))),
+        "mae": float(np.mean(np.abs(errors))),
+        "r2": float(1 - ss_res / ss_tot) if ss_tot > 0 else np.nan,
+    }
+
     if thr is not None:
         hi = y >= thr
         out["hi_n"] = int(hi.sum())
-        out["hi_rmse"] = float(np.sqrt(np.mean((y[hi] - p[hi]) ** 2))) if hi.any() else np.nan
+        out["hi_rmse"] = (
+            float(np.sqrt(np.mean(errors[hi] ** 2)))
+            if hi.any() else np.nan
+        )
+
         pred_hi = p >= thr
-        out["hi_recall"] = float((pred_hi & hi).sum() / hi.sum()) if hi.any() else np.nan
-        out["hi_precision"] = float((pred_hi & hi).sum() / pred_hi.sum()) if pred_hi.any() else np.nan
+        out["hi_recall"] = (
+            float((pred_hi & hi).sum() / hi.sum())
+            if hi.any() else np.nan
+        )
+        out["hi_precision"] = (
+            float((pred_hi & hi).sum() / pred_hi.sum())
+            if pred_hi.any() else np.nan
+        )
+
         if q0 is not None:
             q0 = np.asarray(q0, float)
-            on = hi & (q0 < thr)                      # below threshold today, above it at the horizon
-            fa = pred_hi & (q0 < thr)                 # forecast says "will cross" while today is below
-            out["onset_n"] = int(on.sum())
-            out["onset_recall"] = float((fa & on).sum() / on.sum()) if on.any() else np.nan
-            out["onset_alarms"] = int(fa.sum())
-            out["onset_precision"] = float((fa & on).sum() / fa.sum()) if fa.any() else np.nan
+            onset = q0 < thr
+            actual_onset = onset & hi
+            alarms = onset & pred_hi
+
+            out["onset_n"] = int(actual_onset.sum())
+            out["onset_recall"] = (
+                float((alarms & hi).sum() / actual_onset.sum())
+                if actual_onset.any() else np.nan
+            )
+            out["onset_alarms"] = int(alarms.sum())
+            out["onset_precision"] = (
+                float((alarms & hi).sum() / alarms.sum())
+                if alarms.any() else np.nan
+            )
+
     return out
 
 
@@ -222,9 +253,14 @@ def main():
 
         forecasts.to_csv(forecast_path, index=False, compression="gzip")
         print(f"Dashboard forecasts saved: {forecast_path}")
-    show = res[["horizon", "split", "model", "n", "rmse", "median_station_rmse", "median_station_nse",
-                "hi_n", "hi_rmse", "hi_recall", "hi_precision",
-                "onset_n", "onset_recall", "onset_alarms", "onset_precision"]].round(3)
+    show = res[[
+    "horizon", "split", "model", "n",
+    "rmse", "mae", "r2", "hi_rmse",
+    "median_station_rmse", "median_station_nse",
+    "hi_n", "hi_recall", "hi_precision",
+    "onset_n", "onset_recall", "onset_alarms",
+    "onset_precision"
+    ]].round(3)
     md = [f"# Baseline report ({'discharge + ERA5-Land weather' if feats_wx else 'discharge-only'})\n",
           f"Train <= {a.train_end}, val <= {a.val_end}, test >= {a.test_start}. Stations used: {len(ready)}. "
           f"Unseen stations: {len(grp['held'])} random held-out {sorted(map(str, grp['held']))} + "
