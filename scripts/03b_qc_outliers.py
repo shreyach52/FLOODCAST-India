@@ -1,61 +1,65 @@
-"""STEP 2b: flag and remove impossible discharge spikes BEFORE modelling.
+"""STEP 2b: flag and remove impossible discharge values BEFORE modelling (rules: floodcast/qc.py).
 
-  python scripts/03b_qc_outliers.py            # writes cleaned table, keeps a raw backup
-Rules:
-  DROP   : value > 20 x the station's 99.9th percentile (absurd versus its own history, e.g. a typo).
-  REVIEW : value > 30 x the median of the +-3 neighbouring days AND > 500. These are NOT dropped:
-           real floods (e.g. Aug 2018 / Aug 2019) can look like this. A human decides.
-All flags go to reports/qc_flags.csv (column `action`). Only DROP rows are removed from
-discharge_daily.csv.gz; the untouched original is kept as discharge_daily_raw.csv.gz.
+  python scripts/03b_qc_outliers.py
+Writes reports/qc_flags.csv (column `action`: drop / review). DROP rows are removed from
+data/interim/discharge_daily.csv.gz; the untouched original is kept as discharge_daily_raw.csv.gz.
+Always re-runs from the raw backup, so it is safe to run again after changing a rule or decisions.
+
+Human override: put rows in configs/qc_decisions.csv (columns station_id,date,action with action = keep or drop).
+  keep -> a flagged row is restored,  drop -> an unflagged (e.g. 'review') row is removed.
 """
 import _bootstrap  # noqa: F401
 import shutil
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from floodcast import config
+from floodcast.qc import flag_station
 
-INTERIM, REPORTS = Path(config.INTERIM), Path(config.INTERIM).parent.parent / "reports"
+INTERIM, REPORTS = Path(config.INTERIM), Path(config.REPORTS)
+DECISIONS = Path(config.CONFIGS) / "qc_decisions.csv"
 
 
 def main():
-    f = INTERIM / "discharge_daily.csv.gz"
-    raw = INTERIM / "discharge_daily_raw.csv.gz"
+    f, raw = INTERIM / "discharge_daily.csv.gz", INTERIM / "discharge_daily_raw.csv.gz"
     if not raw.exists():
-        shutil.copy(f, raw)                      # always QC from the untouched original
+        shutil.copy(f, raw)
     df = pd.read_csv(raw, parse_dates=["date"]).sort_values(["station_id", "date"]).reset_index(drop=True)
 
-    flags = []
+    parts = []
     for sid, g in df.groupby("station_id"):
-        s = g.set_index("date")["discharge"]
-        full = s.reindex(pd.date_range(s.index.min(), s.index.max(), freq="D"))
-        p999 = full.quantile(0.999)
-        # median of the 6 neighbouring days, excluding the day itself
-        nb = pd.concat([full.shift(k) for k in (-3, -2, -1, 1, 2, 3)], axis=1).median(axis=1)
-        r1 = (full > 20 * max(p999, 1e-9)) & (full > 0)
-        r2 = (full > 30 * nb.clip(lower=1e-9)) & (full > 500)
-        bad = full[(r1 | r2) & full.notna()]  # r1 => drop, r2 only => review
-        for d, v in bad.items():
-            flags.append({"station_id": sid, "date": d, "discharge": v, "station_p999": p999,
-                          "neighbour_median": nb.loc[d], "rule1": bool(r1.loc[d]), "rule2": bool(r2.loc[d]),
-                          "action": "drop" if r1.loc[d] else "review"})
-    fl = pd.DataFrame(flags)
+        fl = flag_station(g.set_index("date")["discharge"])
+        if len(fl):
+            fl.insert(0, "station_id", sid)
+            parts.append(fl)
+    fl = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(
+        columns=["station_id", "date", "discharge", "action", "rule"])
+
+    if DECISIONS.exists():                               # human decisions win over the rules
+        dec = pd.read_csv(DECISIONS, parse_dates=["date"])
+        for _, r in dec.iterrows():
+            m = (fl.station_id == r.station_id) & (fl.date == r.date)
+            if m.any():
+                fl.loc[m, "action"] = r.action
+                fl.loc[m, "rule"] = "human_decision"
+            else:
+                v = df.loc[(df.station_id == r.station_id) & (df.date == r.date), "discharge"]
+                fl.loc[len(fl)] = [r.station_id, r.date, float(v.iloc[0]) if len(v) else float("nan"),
+                                   r.action, "human_decision"]
     REPORTS.mkdir(exist_ok=True)
     fl.to_csv(REPORTS / "qc_flags.csv", index=False)
-    if fl.empty or not (fl.action == "drop").any():
-        clean = df
-    else:
-        key = set(zip(fl.loc[fl.action == "drop", "station_id"], fl.loc[fl.action == "drop", "date"]))
-        clean = df[[(a, b) not in key for a, b in zip(df.station_id, df.date)]]
+
+    drop = set(zip(fl.loc[fl.action == "drop", "station_id"], fl.loc[fl.action == "drop", "date"]))
+    clean = df[[(a, b) not in drop for a, b in zip(df.station_id, df.date)]]
     clean.to_csv(f, index=False)
-    print(f"dropped {len(df) - len(clean)} rows, {int((fl.action == 'review').sum()) if len(fl) else 0} flagged for review; "
-          f"max discharge now {clean.discharge.max():.0f}")
+    nrev = int((fl.action == "review").sum())
+    print(f"dropped {len(drop)} rows, {nrev} left in the data for review; "
+          f"max discharge now {clean.discharge.max():.0f}; stations touched: {fl.station_id.nunique() if len(fl) else 0}")
     if len(fl):
         out = fl.sort_values(["action", "discharge"], ascending=[True, False]).copy()
-        out["date"] = out["date"].dt.strftime("%Y-%m-%d")
-        print(out.head(30).round(1).to_string(index=False))
+        out["date"] = pd.to_datetime(out["date"]).dt.strftime("%Y-%m-%d")
+        print(out.head(40).round(1).to_string(index=False))
 
 
 if __name__ == "__main__":

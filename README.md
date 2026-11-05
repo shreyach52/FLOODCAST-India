@@ -1,4 +1,4 @@
-# FLOODCAST INDIA - Step 1: data layer
+# FLOODCAST INDIA
 
 Goal of this step: get the real CWC river-discharge data onto your machine, look at its
 real columns, and turn it into ONE clean table (`station_id, date, discharge`) that every
@@ -9,7 +9,7 @@ later step uses. Nothing here trains a model yet.
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python -m pytest -q                # should print: 27 passed
+python -m pytest -q                # all tests should pass
 ```
 
 ## Try the pipeline on FAKE data first (30 seconds)
@@ -44,3 +44,17 @@ If a download fails, open the link in a browser, save the CSV into `data/raw/cwc
 - `floodcast/config.py`     paths + CWC download registry.
 - `docs/DATA_SOURCES.md`    all six data sources: what each gives, how to get it, what is verified.
 - `docs/STEP_LOG.md`        what is done and what comes next.
+
+
+## Pipeline after step 1 (run in this order)
+
+```
+python scripts/04_gap_analysis.py
+python scripts/03b_qc_outliers.py              # drops impossible discharge values, writes reports/qc_flags.csv
+python scripts/06a_download_era5land.py        # needs a free Copernicus CDS account + ~/.cdsapirc (see script header)
+python scripts/06b_extract_station_weather.py  # -> data/interim/weather_daily.csv.gz, reports/weather_report.md
+python scripts/05_baseline.py                  # -> reports/baseline_report.md (with vs without weather)
+python scripts/07_lstm.py --quick              # 2-min pipeline check, then:  python scripts/07_lstm.py
+```
+
+Status and next steps: `docs/STEP_LOG.md`. Large data folders are git-ignored on purpose.

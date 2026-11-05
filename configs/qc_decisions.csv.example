@@ -1,0 +1,2 @@
+station_id,date,action
+# example: KOLLEGAL,2019-08-12,drop   (action is keep or drop; delete this comment line)
