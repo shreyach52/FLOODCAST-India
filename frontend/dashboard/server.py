@@ -4,6 +4,7 @@
 
 It only reads files the backend already wrote. It never trains, predicts or edits anything.
 """
+import os
 import json
 import mimetypes
 import sys
